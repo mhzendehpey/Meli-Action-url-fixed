@@ -89,25 +89,38 @@ jobs:
             THRESH_MB=1800
           fi
 
+          FILESIZE=$(stat -c%s "$FILEPATH" 2>/dev/null || echo 0)
+          THRESH_BYTES=$((THRESH_MB * 1024 * 1024))
+
           BASENAME=$(basename "$FILEPATH")
 
-          cd temp_dl || exit 1
+          if [ "$FILESIZE" -gt "$THRESH_BYTES" ]; then
+            echo "🔪 Splitting into ${THRESH_MB}MB parts..."
+            cd temp_dl || exit 1
 
-          ARCHIVE_BASE="${BASENAME%.*}_$(date +%Y%m%d_%H%M%S)"
+            ARCHIVE_BASE="${BASENAME%.*}_$(date +%Y%m%d_%H%M%S)"
 
-          if [ -n "$PASS" ]; then
-            7z a -p"$PASS" -mhe=on -mx=3 -v${THRESH_MB}m "${ARCHIVE_BASE}.7z" "$BASENAME"
+            if [ -n "$PASS" ]; then
+              7z a -p"$PASS" -mhe=on -mx=3 -v${THRESH_MB}m "${ARCHIVE_BASE}.7z" "$BASENAME"
+            else
+              7z a -mx=3 -v${THRESH_MB}m "${ARCHIVE_BASE}.7z" "$BASENAME"
+            fi
+
+            if [ -f "${ARCHIVE_BASE}.7z.001" ] && [ ! -f "${ARCHIVE_BASE}.7z.002" ]; then
+              mv "${ARCHIVE_BASE}.7z.001" "${ARCHIVE_BASE}.7z"
+            fi
+
+            echo "archive_name=${ARCHIVE_BASE}.7z" >> "$GITHUB_OUTPUT"
+
+            rm -- "${BASENAME}"
+
+            cd ..
+
+            echo "Parts created:"
+            ls -lh temp_dl/
           else
-            7z a -mx=3 -v${THRESH_MB}m "${ARCHIVE_BASE}.7z" "$BASENAME"
+            echo "📦 No split needed ($(( FILESIZE / 1024 / 1024 )) MB)"
           fi
-
-          if [ -f "${ARCHIVE_BASE}.7z.001" ] && [ ! -f "${ARCHIVE_BASE}.7z.002" ]; then
-            mv "${ARCHIVE_BASE}.7z.001" "${ARCHIVE_BASE}.7z"
-          fi
-
-          echo "archive_name=${ARCHIVE_BASE}.7z" >> "$GITHUB_OUTPUT"
-
-          cd ..
 
       - name: Get Current Date
         id: get_date
